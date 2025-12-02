@@ -23,6 +23,7 @@ For more videos of OrbitZoo's interface, see:
 # OrbitZoo Environment
 
 One key aspect of OrbitZoo is the ability to initialize systems without specifying every aspect of it by making use of default parameters throughout initializations (e.g., mass, radius, drag and reflection coefficients, etc.). Not only are these parameters not relevant for observing the Keplerian motion of bodies (assuming they stay within the same orbit indefinitely), but also facilitate the learning of orbital dynamics for people unfamiliar with it:
+
 |Environment Parameter|Description|Default|
 |-|-|-|
 |dynamics_library|Type of dynamics behind propagation of bodies. 'tensorgator' provides an analytical method for natural propagation, while 'orekit' provides a numerical propagation for precise propagation and thrust manoeuvers.|'orekit'|
@@ -35,6 +36,7 @@ One key aspect of OrbitZoo is the ability to initialize systems without specifyi
 |interface_config|Interface configuration/customization.|None|
 
 OrbitZoo directly extends from PettingZoo's *ParallelEnv* class, providing a standardization in terms of available functions for MARL:
+
 |Environment Function|Description|
 |-|-|
 |reset|Places all bodies of the system in their initial state. Optionally accepts a seed, ensuring reproducibility when initial uncertainty is considered.|
@@ -46,6 +48,7 @@ OrbitZoo directly extends from PettingZoo's *ParallelEnv* class, providing a sta
 |find_optimal_params|Standardized function to find optimal RL hyperparameters using Optuna. Each trial corresponds to a single call to the 'train' function.|
 
 After initialization, the user has access to a small number of attributes that contain a lot of information about the system:
+
 |Environment Attributes|Description|
 |-|-|
 |dynamics|Abstract dynamics attribute that allow access to the physics component of the environment (that ultimately depend on the chosen 'dynamics_library'). Nonetheless, the dynamics provide access to all body instances and functions that can be used for different purposes (e.g., current epoch, distance between bodies, altitude, etc.). When using Orekit, each body  contains a large range of individual characteristics (e.g., current position and velocity uncertainty, mass, and state in different representations), providing a way to calculate the Probability of Collision between two bodies.|
@@ -175,11 +178,11 @@ Most use-cases fall within Orekit, specifically regarding RL, as most missions a
 
 Outside RL, OrbitZoo allows the modelling and testing of classical manoeuvres in a more realistic setting, such as the Hohmann transfer.
 
-The Hohmann transfer consists of placing a spacecraft on an orbit with a higher altitude by saving the most amount of fuel. This happens when the spacecraft applies an instantaneous thrust in two very specific moments ($F_1$ and $F_2$):
+The Hohmann transfer consists of placing a spacecraft on an orbit with a higher altitude by saving the most amount of fuel. This happens when the spacecraft applies an instantaneous thrust in two very specific moments (F1 and F2):
 
 ![image](utils/hohmann1.png)
 
-While in theory this maneuver is accurate, it also contains irrealistic characteristics, namely the fact that maneuvers are never completely instantaneous and that the spacecraft loses mass after $F_1$, which impacts the force required for $F_2$. The amount of mass that the spacecraft loses is inversely proportional to the thruster specific impulse (a measure of the efficiency of the thruster). OrbitZoo automatically considers these factors, as manoeuvers are applied continuously with time and mass is also continuously lost with time.
+While in theory this maneuver is accurate, it also contains irrealistic characteristics, namely the fact that maneuvers are never completely instantaneous and that the spacecraft loses mass after F1, which impacts the force required for F2. The amount of mass that the spacecraft loses is inversely proportional to the thruster specific impulse (a measure of the efficiency of the thruster). OrbitZoo automatically considers these factors, as manoeuvers are applied continuously with time and mass is also continuously lost with time.
 
 To recreate the Hohmann maneuver in OrbitZoo, we first define the spacecraft:
 ```py
@@ -222,7 +225,7 @@ env = OrbitZoo(
     )
 ```
 
-For the specifications of this spacecraft, in theory it is needed instantaneous thrusts of $F_1 = 1512~N$ and $F_2 = 1452~N$ (already considering the loss of mass). If we consider that the spacecraft applies that force for one minute with a constant loss of mass, then $F_1 = 24.84082~N$ and $F_2 = 23.06173~N$, and the time of the entire manoeuver is of $3987$ seconds.
+For the specifications of this spacecraft, in theory it is needed instantaneous thrusts of F1 = 1512 N and F2 = 1452 N (already considering the loss of mass). If we consider that the spacecraft applies that force for one minute with a constant loss of mass, then F1 = 24.84082 N and F2 = 23.06173 N, and the time of the entire manoeuver is of 3987 seconds.
 
 To verify if these calculations are correct, we can perform the needed manoeuvers through the 'actions' argument in the 'step' function:
 ```py
@@ -270,66 +273,66 @@ class HohmannEnv(OrbitZoo):
         return observations
     
     def rewards(self, actions, observations, new_observations, running_agents):
-    rewards = {}
-    terminations = {}
+        rewards = {}
+        terminations = {}
 
-    target = np.array(self.target_equinoctial[:5])
-    tol = np.array(self.tolerance[:5])
+        target = np.array(self.target_equinoctial[:5])
+        tol = np.array(self.tolerance[:5])
 
-    # weights
-    alpha = np.array([1000, 1, 1, 10, 10])
-    alpha_1 = 1
-    alpha_2 = 0.5
+        # weights
+        alpha = np.array([1000, 1, 1, 10, 10])
+        alpha_1 = 1
+        alpha_2 = 0.5
 
-    for spacecraft in self.dynamics.spacecrafts:
+        for spacecraft in self.dynamics.spacecrafts:
 
-        agent = spacecraft.name
-        if agent not in running_agents:
-            continue
+            agent = spacecraft.name
+            if agent not in running_agents:
+                continue
 
-        action = np.clip(actions[agent], -1, 1)
+            action = np.clip(actions[agent], -1, 1)
 
-        # current & previous equinoctial vectors (a, ex, ey, hx, hy)
-        cur = np.array(new_observations[agent][:5])
-        prev = np.array(observations[agent][:5])
+            # current & previous equinoctial vectors (a, ex, ey, hx, hy)
+            cur = np.array(new_observations[agent][:5])
+            prev = np.array(observations[agent][:5])
 
-        # differences now & before
-        diff = np.abs(target - cur)
-        diff_prev = np.abs(target - prev)
+            # differences now & before
+            diff = np.abs(target - cur)
+            diff_prev = np.abs(target - prev)
 
-        # check tolerance
-        if np.all(diff <= tol):
-            rewards[agent] = 0
+            # check tolerance
+            if np.all(diff <= tol):
+                rewards[agent] = 0
+                terminations[agent] = False
+                continue
+
+            # improvement ratios (divide only if outside tolerances)
+            mask = diff > tol
+            ratios = np.zeros_like(diff)
+            ratios[mask] = (diff_prev[mask] - diff[mask]) / target[mask]
+
+            # weighted improvement
+            improvement = np.sum(alpha * ratios)
+
+            # thrust switch
+            thrust_indicator = 0 if action[3] < 0 else 1
+
+            # final reward
+            thrust_fraction = (action[0] + 1) / 2      # magnitude term
+            penalty_term = (action[1] + 1) / 2         # direction penalty
+
+            rewards[agent] = thrust_indicator * (
+                alpha_1 * thrust_fraction * improvement
+                - alpha_2 * penalty_term
+            )
+
             terminations[agent] = False
-            continue
 
-        # improvement ratios (divide only if outside tolerances)
-        mask = diff > tol
-        ratios = np.zeros_like(diff)
-        ratios[mask] = (diff_prev[mask] - diff[mask]) / target[mask]
-
-        # weighted improvement
-        improvement = np.sum(alpha * ratios)
-
-        # thrust switch
-        thrust_indicator = 0 if action[3] < 0 else 1
-
-        # final reward
-        thrust_fraction = (action[0] + 1) / 2      # magnitude term
-        penalty_term = (action[1] + 1) / 2         # direction penalty
-
-        rewards[agent] = thrust_indicator * (
-            alpha_1 * thrust_fraction * improvement
-            - alpha_2 * penalty_term
-        )
-
-        terminations[agent] = False
-
-    return rewards, terminations
+        return rewards, terminations
 ```
 We take advantage of the 'reset' function to define values that are needed for the mission, such as the target orbit in this case. The agent observes its current equinoctial elements (similar to Keplerian elements) and fuel, and the reward encourages the agent to apply large but accurate thrusts.
 
-For training, OrbitZoo contains implementations of RL algorithms with discrete and continuous actions spaces, as well as off-policy and on-policy algorithms. In this scenario, algorithms with discrete action spaces do not work out because we want the agent to learn both the direction and magnitude of the thrust, which are very specific values. We can use the continuous version of PPO, where we include an additional dimension for the decision to apply thrust ($-1 \leq \delta \leq 1$):
+For training, OrbitZoo contains implementations of RL algorithms with discrete and continuous actions spaces, as well as off-policy and on-policy algorithms. In this scenario, algorithms with discrete action spaces do not work out because we want the agent to learn both the direction and magnitude of the thrust, which are very specific values. We can use the continuous version of PPO, where we include an additional dimension for the decision to apply thrust:
 ```py
 def action_to_thrust(self, action):
     scaled_action = ((action + 1) / 2) * self.action_space
