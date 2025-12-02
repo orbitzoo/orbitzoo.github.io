@@ -1,8 +1,8 @@
-# OrbitZoo
+![image](utils/orbitzoo1.jpg)
 
 OrbitZoo is an open-source python environment designed to simulate the system dynamics of celestial bodies, offering an interactive 3D interface that showcases realistic orbital mechanics. With multi-agent reinforcement learning (MARL) at its core, OrbitZoo not only provides a powerful platform for simulating space missions but also adheres to RL best practices, making it ideal for developing both real-world and fictional space scenarios. Whether you’re exploring gravitational interactions, training intelligent agents, or visualizing complex orbital systems, OrbitZoo creates a simple, dynamic and immersive experience for any space-related project.
 
-![image](utils/orbitzoo_architecture.jpg)
+![image](utils/orbitzoo_architecture.png)
 
 <p align="center">
   <img src="utils/static_orbit.gif" width="300">
@@ -20,108 +20,49 @@ For more videos of OrbitZoo's interface, see:
 - [Chase Target Mission](https://www.youtube.com/watch?v=lBblgsPH7e8)
 
 
-# Space Dynamics
+# OrbitZoo Environment
 
-OrbitZoo simulates the propagation of a system of bodies around Earth, with the space dynamics belonging to Orekit and used here through a Python wrapper. If you want to change the central body (e.g., to the Moon), make sure to change the parameters in the constants.py file (such as the MU constant), representing the constant gravitational parameter of the central body.
-
-Since dynamics are related to the movement of bodies, the fundamental component of OrbitZoo is class **Body**. Each system can have an arbitrary number of bodies.
-
-## Body
-
-The **Body** class is the most fundamental class in OrbitZoo, saving all relevant information that characterizes that body. When creating an instance of **Body**, you can provide the following parameters:
-
-|Parameter|Type|Required|Description|Example|
-|-|-|-|-|-|
-|name|string|True|Individual identifier of the body.|'asteroid_1'
-|initial_state|dict[str, float]|True|Initial state of the body that fully characterizes its position and motion in space. It only accepts Cartesian orbit parameters.| {"x": 4117828.7, "y": 18807373.6, "z": 1291158.1, "x_dot": -4598.9, "y_dot": 1132.5, "z_dot": 223.9},
-|initial_state_uncertainty|dict[str, float]|True|Uncertainty (standard deviation) of the previously provided 'initial_state'. | {"x": 10.0, "y": 10.0, "z": 10.0, "x_dot": 0.001, "y_dot": 0.001, "z_dot": 0.001}
-|initial_mass|float|True|Initial mass of the body (in kg).| 50.0
-|radius|float|True|Radius of the body (in meters), which is assumed to be spherical.|5.0
-|save_steps_info|boolean|False|Boolean value indicating if you want the body to save every state at each step in a list (accessible by attribute self.past_states). Default is False.|False
-
-The values provided in 'initial_state' correspond to a mean vector -- $\mu = (x,y,z,\dot{x},\dot{y},\dot{z})$ -- and the values provided in 'initial_state_uncertainty' are used to build the main diagonal of a covariance matrix -- $\Sigma$. When initializing the system, the body's initial position and velocity ($s_0$) will be sampled from a multivariate normal distribution with parameters $\mu$ and $\Sigma$, that is, $s_0 \sim \mathcal{N}(\mu,\Sigma)$.
-
-After creating the body, you have access to much more information regarding the current state of the body by accessing attribute *self.current_state* (which is an instance of SpacecraftState from Orekit). In order to make your work a bit easier, class **Body** already implements some instance methods that are commonly accessed, such as:
-
-|Instance Method|Description|
-|-|-|
-|get_cartesian_position|Returns an array with the body cartesian position $(x, y, z)$, in meters (where the origin is the center of Earth).|
-|get_cartesian_velocity|Returns an array with the body cartesian velocity $(\dot{x}, \dot{y}, \dot{z})$ in meters.|
-|get_equinoctial_position|Returns an array with the body equinoctial elements $(a, e_x, e_y, h_x, h_y, M)$.|
-|get_keplerian_position|Returns an array with the body keplerian elements $(a, e, i, \omega, \Omega, M)$.|
-|get_mass|Returns the current mass of the body, in kg.|
-|get_altitude|Returns the distance to the origin (norm of position), in meters.
-|get_covariance_matrix|Returns the current state covariance matrix (6x6).
-|set_covariance_matrix|Updates the current state covariance matrix (6x6).
-
-Class **Body** also provides some static methods, which are always related to two given bodies:
-
-|Static Method|Description|
-|-|-|
-|get_distance|Returns the distance between two given bodies, in meters.
-|tca|Returns the Time of Closest Approach (TCA) between two given bodies, in seconds. It assumes both bodies are moving in a straight line, without accelerations.
-|poc_akella|Returns the Probability of Collision between two given bodies, using Akella's method.
-|poc_rederivation|Returns the Probability of Collision between two given bodies, using Ricardo's method (faster than Akella).
-
-Furthermore, class **Body** contains an individual propagator, which is used to not only calculate future positions and velocities of the body, but also the evolution of the uncertainty (covariance matrix, accessible at any time by method get_covariance_matrix). This propagator receives a number of forces that the body is subject to (like gravity of Earth/Sun/Moon, solar radiation pressure, or drag) and according to this is able to predict the state of the body after $\Delta t$ seconds. In order to propagate the body $\Delta t$ seconds in the future, function *step* uses the propagator and automatically updates the *self.current_state* attribute.
-
-## Satellite
-
-Since a body can also have thrusting capabilities, a class that extends from **Body** was created, named **Satellite**. Therefore, in order to create an instance of the class **Satellite**, you also have to provide this additional information:
-
-|Parameter|Type|Required|Description|Example|
-|-|-|-|-|-|
-|fuel_mass|float|True|Initial mass of the fuel (in kg).|20.0
-|isp|float|True|Specific impulse ($I_\text{sp}$) of the engine (in s).| 2500.0
-
-Since Satellites lose fuel mass when performing thrust maneuvers, additional method are provided:
-
-|Method|Description|
-|-|-|
-|get_fuel|Returns the amount of available fuel (in kg).|
-|has_fuel|Returns a boolean value indicating if the satellite still has any fuel.|
-
-Regarding the propagation of a satellite, function *step* can now receive an action (which corresponds to a force) that is added to the propagator before the calculations. No thrust can also be provided.
-
-## Forces
-
-The main force that is present in all systems is gravity. OrbitZoo allows several gravity models, that can be easily changed:
-
-|Model|Description|
-|-|-|
-|Newtonian Attraction|Simple attraction based on the gravitational parameter of the central body, assuming the body is perfectly spherical. It is the fastest model to compute.|
-|Lense-Thirring|Computationally demanding attraction model that performs small corrections to the Newtonian attraction model, based on general relativity. Mainly used for deep space missions.|
-|Holmes Featherstone|Representation of the gravitational field of a celestial body, where bodies are not seen as perfectly spherical. It is an algorithm that provides a balance between precision and speed, being the most recommended for most systems.|
-
-OrbitZoo provides some perturbative forces that can be easily added or removed for each body apart from the Earth's gravity. For the sake of simplicity, we consider that all bodies are isotropic, meaning that the attitude (or orientation) of the body does **not** influence the force being applied, only the position. Therefore, we consider that all bodies are spherical. The available forces are split in classes: 
-
-|Class|Arguments|Description
+One key aspect of OrbitZoo is the ability to initialize systems without specifying every aspect of it by making use of default parameters throughout initializations (e.g., mass, radius, drag and reflection coefficients, etc.). Not only are these parameters not relevant for observing the Keplerian motion of bodies (assuming they stay within the same orbit indefinitely), but also facilitate the learning of orbital dynamics for people unfamiliar with it:
+|Environment Parameter|Description|Default|
 |-|-|-|
-|ThirdBodyForce|'name' of the third body.|Force that models the gravitational attraction of a third body. All possible bodies are: 'SOLAR_SYSTEM_BARYCENTER', 'SUN', 'MERCURY', 'VENUS', 'EARTH_MOON', 'EARTH', 'MOON', 'MARS', 'JUPITER', 'SATURN', 'URANUS', 'NEPTUNE', 'PLUTO'
-|SolarRadiationForce|'reflection_coefficient' of the body.|Force that models the solar radiation pressure on a given body with a reflection coefficient (reflection_coefficient of 0 indicating that the body is not sensitive to radiation). It also has in consideration shadows created by Earth and Moon.
-|DragForce|'drag_coefficient' of the body.|Force that models the drag that a body with a given drag coefficient is subject to (drag_coefficient of 0 indicating that the body is not sensitive to drag).
+|dynamics_library|Type of dynamics behind propagation of bodies. 'tensorgator' provides an analytical method for natural propagation, while 'orekit' provides a numerical propagation for precise propagation and thrust manoeuvers.|'orekit'|
+|step_size|Default time to advance the system (in seconds) every time the 'step' function is called.|60|
+|initial_epoch|Initial date and time, relevant for the correct modeling of perturbations when using 'orekit'.|current epoch|
+|drifters|List of bodies without maneuvering capabilities. Each body must contain information about its initial state, and optionally additional characteristics.|[]|
+|spacecrafts|List of bodies with maneuvering capabilities (can only be added when dynamics_library = 'orekit').|[]|
+|ground_stations|List of ground stations (stationary bodies on the surface of Earth).|[]|
+|render|Bool indicating if the system is to be visualized through the interface (interface is initialized).|False|
+|interface_config|Interface configuration/customization.|None|
 
-
-# Environment
-
-Class OrbitZoo is the environment wraps all this and works as the "interface" for you. After definying all bodies of a system (instances of class **Body** or **Satellite**), you can access the following attributes:
-
-|Attribute|Description|
+OrbitZoo directly extends from PettingZoo's *ParallelEnv* class, providing a standardization in terms of available functions for MARL:
+|Environment Function|Description|
 |-|-|
-|drifters|An array containing all bodies of instance **Body** (called 'drifters' because of their natural propagation without the ability of applying thrusts).
-|satellites|An array containing all bodies of instance **Satellite**.
+|reset|Places all bodies of the system in their initial state. Optionally accepts a seed, ensuring reproducibility when initial uncertainty is considered.|
+|step|Propagates all bodies of the system. Optionally accepts a 'step_size' and 'actions' (dictionaty containing the thrust for each spacecraft).|
+|render|Shows the current state of the system through the interface. Optionally receives a 'save_path', allowing to save the current frame in vectorized format (PDF).|
+|observations|Utility function that returns the observation for each agent (i.e., spacecraft) in the system. Only needs to be implemented if OrbitZoo is used for RL.||
+|rewards|Utility function that returns the reward for each agent (i.e., spacecraft) in the system. Only needs to be implemented if OrbitZoo is used for RL.|
+|train|Standardized function for training agents that uses the implemented 'observations' and 'rewards' functions.|
+|find_optimal_params|Standardized function to find optimal RL hyperparameters using Optuna. Each trial corresponds to a single call to the 'train' function.|
 
-Most importantly, it contains standardized methods to control the system propagation:
-
-|Method|Description|
+After initialization, the user has access to a small number of attributes that contain a lot of information about the system:
+|Environment Attributes|Description|
 |-|-|
-reset| Reinitializes the system to its initial state. If the initial state of some body contains uncertainty, it may generate a new initial state for that body.
-step| Propagates the whole system (all bodies) $\Delta t$ seconds to the future.
-render| Shows a 3D frame of the current state of the system.
-get_body|Receives a body name (string) and returns the body instance (drifter or satellite).
+|dynamics|Abstract dynamics attribute that allow access to the physics component of the environment (that ultimately depend on the chosen 'dynamics_library'). Nonetheless, the dynamics provide access to all body instances and functions that can be used for different purposes (e.g., current epoch, distance between bodies, altitude, etc.). When using Orekit, each body  contains a large range of individual characteristics (e.g., current position and velocity uncertainty, mass, and state in different representations), providing a way to calculate the Probability of Collision between two bodies.|
+|interface|Interface attribute that, while usually not directly accessed, allows access to the interface component of the environment.|
 
-Finally, class **OrbitZoo** is the environment that wraps all this and works as the "interface" with the developer. Everything is accessed through here, whether you want to access a certain Body instance (arrays "drifters" and "satellites"), propagate the system (function "step"), reinitialize the system (function "reset"), or visualize it (function "render"). For reproducibility of initial conditions, the reset function may contain a seed. OrbitZoo is also able to perform parallel propagations for large systems with realistic perturbations. For this, switch the boolean "parallel_propagations" to True.
+# Dynamics
 
+All bodies (drifters, spacecrafts and ground-stations) are instances of class **Body**. This class provides the body's current Cartesian position and velocity, and is automatically updated at each step.
+This allows for the implementation of different utility functions, such as distance between bodies, altitude, or if bodies have line of sight without Earth's intersection. This information is generic for both dynamics libraries (Tensorgator and Orekit).
+
+The information required for the initialization of each body depends on the dynamics library:
+- **Tensorgator**: The user must provide the Keplerian orbital elements (including the anomaly) of the body. At initialization, OrbitZoo creates a matrix containing the initial orbital elements of all bodies. At each step, OrbitZoo updates the current epoch and analytically calculates the Cartesian positions for the current epoch and about a millisecond before (to calculate the instantaneous velocity). Tensorgator makes use of GPU through the Numba library to perform faster computations.
+
+- **Orekit**: The user must provide the Cartesian position and velocity of the body. Optionally, the user can also provide a unique name (required for spacecrafts, used for performing actions/manoeuvers), the initial position and velocity uncertainty (default is practically zero), dry mass, radius, drag and reflection coefficient, and forces (perturbations). For spacecrafts, the user can also provide the initial fuel mass and the thruster specific impulse.
+The initial state of the body is a sample from a multivariate normal distribution (with the mean being the initial position/velocity and the covariance being the diagonal matrix with the position and velocity uncertainty).
+
+Ground-stations can be added in both libraries, and the information required is only the Cartesian position indicating the direction of the ground-station (the magnitude of this vector is irrelevant, as the ground-station is always placed at the surface of Earth).
 
 # How to setup the environment with Anaconda
 
@@ -146,469 +87,289 @@ pip install play3d==0.1.5
 
 There might be an error when trying to run the code for the first time (related to a file 'libiomp5md.dll') that can be prevented by deleting the file, located in **...\anaconda3\envs\orbit_zoo\Library\bin\libiomp5md.dll**
 
-# Examples
 
-The **OrbitZoo** environment class can be used simply for orbital dynamics. With it, you can create systems with several bodies with no maneuvering capabilities (called Drifters, which are instances of class **Body**), bodies with maneuvering capabilities (called Satellites, which are instances of class **Satellite**), propagate them in time and visualize it interactively. This is extremely useful for general analysis of dynamics between bodies and realism evaluation.
+# Tensorgator: Use Cases
 
-## Using OrbitZoo classes...
+Tensorgator is the go-to option if you want to create a system with the following specifications:
+1. Large number of bodies (thousands or millions);
+2. Natural motion (no manoeuvers);
+3. Fast propagation, but not so accurate.
 
-Consider we have a system with two Drifters. In order to create this system in **OrbitZoo**, you need to specify a number of parameters through a JSON file, including the drifters:
+Some use cases may be related to analysis of surface coverage, or MARL training related to task-assignment between satellites by accounting for limited communication with ground-stations.
 
+In the following system, we are adding 3000 bodies in Low-Earth Orbit (LEO) with random orbits, and we are interested in tracking one specific body (named 'X'):
 ```py
-params = {
-        "drifters": [
-            {"name": "asteroid_1",
-             "initial_state": {"x": 4117828.7, "y": 18807373.6, "z": 1291158.1, "x_dot": -4598.9, "y_dot": 1132.5, "z_dot": 223.9},
-             "initial_state_uncertainty": {"x": 10.0, "y": 10.0, "z": 10.0, "x_dot": 0.001, "y_dot": 0.001, "z_dot": 0.001},
-             "initial_mass": 10.0,
-             "radius": 5.0,
-             "save_steps_info": False},
-            {"name": "asteroid_2",
-             "initial_state": {"x": 4117828.7, "y": 18807373.6, "z": 1291158.1, "x_dot": 4598.9, "y_dot": -1132.5, "z_dot": -223.9},
-             "initial_state_uncertainty": {"x": 100.0, "y": 100.0, "z": 100.0, "x_dot": 0.00001, "y_dot": 0.00001, "z_dot": 0.00001},
-             "initial_mass": 10.0,
-             "radius": 2.0,
-             "save_steps_info": False,
-            }
-        ],
-        "delta_t": 100.0,
-        "forces": {
-            "parallel_propagation": False,
-            "gravity_model": "HolmesFeatherstone",
-            "third_bodies": {
-                "active": True,
-                "bodies": ["SUN", "MOON"],
-            },
-            "solar_radiation_pressure": {
-                "active": False,
-                "reflection_coefficients": {
-                    "asteroid_1": 0.5,
-                    "asteroid_2": 0.5,
-                }
-            },
-            "drag": {
-                "active": False,
-                "drag_coefficients": {
-                    "asteroid_1": 0.5,
-                    "asteroid_2": 0.5,
-                }
-            }
-        },
-        "interface": {
-            "show": True,
-            "delay_ms": 0,
-            "zoom": 5.0,
-            "drifters": {
-                "show": True,
-                "show_label": True,
-                "show_velocity": False,
-                "show_trail": True,
-                "trail_last_steps": 100,
-                "color_body": (255, 255, 255),
-                "color_label": (255, 255, 255),
-                "color_velocity": (0, 255, 255),
-                "color_trail": (255, 255, 255),
-            },
-            "satellites": {
-                "show": True,
-                "show_label": True,
-                "show_velocity": False,
-                "show_thrust": True,
-                "show_trail": True,
-                "trail_last_steps": 100,
-                "color_body": (255, 0, 0),
-                "color_label": (255, 255, 255),
-                "color_velocity": (0, 255, 255),
-                "color_thrust": (0, 255, 0),
-                "color_trail": (255, 0, 0),
-            },
-            "earth": {
-                "show": True,
-                "color": (0, 0, 255),
-                "resolution": 50,
-            },
-            "equator_grid": {
-                "show": False,
-                "color": (30, 140, 200),
-                "resolution": 10,
-            },
-            "timestamp": {
-                "show": True,
-            },
-            "orbits": [
-                # {"a": 2030.0e3, "e": 0.01, "i": 5.0, "pa": 20.0, "raan": 20.0, "color": (0, 255, 0)},
-            ],
+drifters = [
+    {
+        'name': 'X',
+        'initial_state': [6378e3 + 500e3, 0.01, np.radians(50), np.pi, np.pi, 0]
+    }
+]
+for k in range(2999):
+    drifters.append({'initial_state': [
+        6378e3 + np.random.uniform(300e3, 1000e3),  # semi-major axis
+        np.random.uniform(0, 0.01),                 # eccentricity
+        np.radians(np.random.uniform(0, 90)),       # inclination
+        np.random.uniform(0, 2*np.pi),              # argument of periapsis
+        np.random.uniform(0, 2*np.pi),              # longitude of the ascending node
+        np.random.uniform(0, 2*np.pi)               # mean anomaly
+    ]})
+```
+To easily observe the trajectory of this body in the interface, we can configure the body appearence:
+```py
+interface_config = {
+    "body": {
+        "X": {
+            "show_trail": True,
+            "color_body": (255, 255, 0),    # yellow
+            "color_label": (255, 255, 0),   # yellow
+            "color_trail": (255, 255, 0),   # yellow
+            "trail_last_steps": 300         # show previous 300 positions
         }
     }
+}
 ```
-
-where the "delta_t" parameter corresponds to the step size (time between steps, $\Delta t$). Other parameters related to the interface can also be manipulated.
-
-
-After having the initial parameters defined, you can create an instance of OrbitZoo, which will initialize all Orekit components on its background:
-
+To initialize the environment with a default step size of 5 seconds:
 ```py
-env = OrbitZoo(params)
+env = OrbitZoo(
+    dynamics_library='tensorgator',
+    step_size=5,
+    drifters=drifters,
+    interface_config=interface_config,
+    render=True
+    )
 ```
 
-From here on out, you can use whatever information that OrbitZoo has according to your needs. For example, if you want to indefinitely propagate the system and visualize it for fun, you might make a script like:
+To observe the system frozen in time (but with an interactive POV) we simply do an infinite loop to render:
+```py
+while True:
+    env.render()
+```
+![image](utils/tensorgator_ex2.png)
+If we want to see the system moving in time, we add the step function:
 ```py
 while True:
     env.step()
-    env.render() # don't forget to have the value params["interface"]["show"] = True
+    env.render()
+```
+![image](utils/tensorgator_ex1.png)
+At any time, you can have the current Cartesian position and velocity of the body:
+```py
+body = env.dynamics.get_body('X')
+print(body.position)
+>>> [ 6.80922000e+06 -1.36990243e-09  6.38795995e-10]
+print(body.velocity)
+>>> [ 1.54693891e-12  4.94251947e+03 -5.89026533e+03]
 ```
 
-If you want to do Monte Carlo simulations to see the evolution of the position uncertainty of the drifter 'asteroid_1' for the first 300 steps, you can do something like:
+# Orekit: Use Cases
 
+Orekit is the go-to option if you want to create a system with the following specifications:
+1. Small number of bodies (dozens or hundreds);
+2. Motion with perturbations (drag, solar radiation pressure, gravity field, third-body forces) and manoeuvers;
+3. Accurate propagation.
+
+Most use-cases fall within Orekit, specifically regarding RL, as most missions are based on thrust control (orbital transfers, collision avoidance manoeuvers, coordination and competition tasks) that require accurate data.
+
+## Classical Maneuvers
+
+Outside RL, OrbitZoo allows the modelling and testing of classical manoeuvres in a more realistic setting, such as the Hohmann transfer.
+
+The Hohmann transfer consists of placing a spacecraft on an orbit with a higher altitude by saving the most amount of fuel. This happens when the spacecraft applies an instantaneous thrust in two very specific moments ($F_1$ and $F_2$):
+
+![image](utils/hohmann1.png)
+
+While in theory this maneuver is accurate, it also contains irrealistic characteristics, namely the fact that maneuvers are never completely instantaneous and that the spacecraft loses mass after $F_1$, which impacts the force required for $F_2$. The amount of mass that the spacecraft loses is inversely proportional to the thruster specific impulse (a measure of the efficiency of the thruster). OrbitZoo automatically considers these factors, as manoeuvers are applied continuously with time and mass is also continuously lost with time.
+
+To recreate the Hohmann maneuver in OrbitZoo, we first define the spacecraft:
 ```py
-import pandas as pd
-import matplotlib.pyplot as plt
-
-body = env.get_body('asteroid_1')
-data = []
-# do 100 simulations
-for _ in range(100):
-    env.reset()
-    # run each simulation for 300 steps
-    for step in range(300):
-        env.step()
-        position = body.get_cartesian_position()
-        data.append({
-            'step': step,
-            'x': position[0],
-            'y': position[1],
-            'z': position[2]
-        })
-df = pd.DataFrame(data)
-std_by_step = df.groupby('step')[['x', 'y', 'z']].std()
-plt.plot(std_by_step)
-plt.show()
+spacecrafts = [
+    {
+        'name': 'spacecraft',
+        'initial_state': [-3529923.947865602, 7042905.715845195, 0.0, 6359.116737768876, 3187.207008809081, 0.0], # Cartesian position and velocity
+        'isp': 1000, # thruster specific impulse
+        'dry_mass': 1,
+        'initial_fuel_mass': 4,
+    },
+]
 ```
-
-Or yet, test the probability of collision (PoC). In this specific system, you may have noticed that both bodies have the same 'initial_state' ($\mu$), but different uncertainties ($\Sigma$), which means that the initial states will be fairly close to one another (approximately the Time of Closest Approach, TCA). You can create a simulation where you propagate the system backwards in time for a little, and then calculate their distance, TCA and PoC:
-
+We can also visualize the initial orbit (with a semi-major axis of 6378+1500 km) and the final orbit (with a semi-major axis of 6378+3000 km):
 ```py
-# propagate backwards in time
-for _ in range(3):
-    env.step_back()
-chaser = env.get_body('asteroid_1')
-target = env.get_body('asteroid_2')
-# calculate distance, TCA and PoC
-distance = Body.get_distance(chaser, target)
-tca = Body.tca(chaser, target)
-poc = Body.poc_rederivation(chaser, target)
-```
-
-## Extending OrbitZoo classes...
-
-There can be several types of problems we may want to solve. Some problems can have multiple agents, and those agents can see different things and have different rewards. The way the agents learn may differ as well. That is why there's no concrete implementation of RL. However, it's pretty easy to develop learning environments through OrbitZoo, by extending the existing classes. What's said from here on out is the thought process of building a learning environment, but you can think differently!
-
-### Definition of the Problem
-
-For example, imagine we want to train an agent that starts on a given Keplerian orbit - $s_0 = (5500 \text{ km}, 0.20, 5.0º, 20.0º, 20.0º)$  - and the objective is to reach a target orbit - $s' = (6300 \text{ km}, 0.23, 5.3º, 24.0º, 24.0º)$ - in 4 days, by performing a sequence of maneuvers. Since the initial state of the agent has to be given in Cartesian coordinates, we can use a static method from class **Body** to convert Keplerian elements to Cartesian:
-
-```py
-Body.print_elements_converted([5_500_000, 0.01, 5.0, 20.0, 20.0, 10.0], 'keplerian')
->>> Cartesian: 6129800.048013737, 7280790.331579311, 415150.31877402193, -5281.077303515858, 4683.916455224767, 543.1013245770663
-```
-
-If we want this exact position every time, we define a very small initial uncertainty (done further ahead).
-
-Of course, space is too big, so we must also define a tolerance for each orbital parameter - $\Delta_\text{min} = (10 \text{ km}, 0.01 \text{ rad}, 0.01 \text{ rad}, 0.001 \text{ rad}, 0.001 \text{ rad})$. If the absolute difference of all elements on a given moment to the target elements are smaller (or equal) than the tolerance, then the agent successfully reached the objective: $|s_t-s'| \leq \Delta_\text{min} \rightarrow$ 😃
-
-### Agent
-
-Now we must define mainly two things regarding the agent: the brain that is going to learn how to take intelligent actions (a.k.a. the learning algorithm, like PPO), and what that brain will see to take the actions (a.k.a. the observation, like the current state of the agent).
-
-Since the agent is a **Satellite**, we create a new class that extends from it:
-
-```py
-from env import OrbitZoo
-from bodies import Satellite
-from ppo import PPO
-
-class Agent(Satellite):
-
-    def __init__(self, params):
-        super().__init__(params)
-        self.ppo = PPO(params["agent"]["device"],
-                       params["agent"]["state_dim_actor"],
-                       params["agent"]["state_dim_critic"],
-                       params["agent"]["action_dim"],
-                       params["agent"]["lr_actor"],
-                       params["agent"]["lr_critic"],
-                       params["agent"]["gae_lambda"],
-                       params["agent"]["gamma"],
-                       params["agent"]["epochs"],
-                       params["agent"]["clip"],
-                       True,
-                       params["agent"]["action_std_init"])
-        
-    def get_state(self):
-        return self.get_equinoctial_position()
-```
-
-For this agent, we're using the PPO algorithm, which receives a bunch of arguments. We can assume that all those arguments will be available in the params["agent"] object. On the init function we are creating the brain of the agent (self.ppo). Everything to do with taking actions and learning is inside this **PPO** instance, and is not relevant here. On the get_state function we define the observation (this value will be returned when functions reset and step are called), which in this case is the equinoctial position (including the longitude).
-
-### Environment
-
-Now we must also extend the environment class **OrbitZoo**, since some methods must be redefined:
-
-```py
-class ChangeOrbitEnv(OrbitZoo):
-
-    def __init__(self, params):
-        super().__init__(params)
-        target = [6300.0e3, 0.23, 5.3, 24.0, 24.0, 10.0]
-        orbit = KeplerianOrbit(target[0] + EARTH_RADIUS, target[1], radians(target[2]), radians(target[3]), radians(target[4]), radians(target[5]), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, PositionAngleType.TRUE, INERTIAL_FRAME, AbsoluteDate(), MU)
-        self.target = [orbit.getA(), orbit.getEquinoctialEx(), orbit.getEquinoctialEy(), orbit.getHx(), orbit.getHy()]
-        self.tolerance = [10_000.0, 0.01, 0.01, 0.001, 0.001]
-
-    def create_bodies(self, params):
-        self.drifters = []
-        self.satellites = [Agent(body_params) for body_params in params["satellites"]]  if "satellites" in params else []
-
-    def normalize_states(self, states):
-        for satellite in self.satellites:
-            state = states[satellite.name]
-            state[0] /= self.target[0]
-            states[satellite.name] = state
-        return states
-
-    def reset(self, seed=None, options=None):
-        
-        for body in self.drifters + self.satellites:
-            body.reset(seed)
-
-        observations = self.normalize_states({satellite.name: satellite.get_state() for satellite in self.satellites})
-        infos = {satellite.name: {} for satellite in self.satellites}
-
-        return observations, infos
-
-    def step(self, actions=None):
-        satellite = self.satellites[0]
-        states = {satellite.name: satellite.step(actions[satellite.name])}
-        rewards, terminations = self.rewards(states)
-        observations = self.normalize_states(states)
-        truncations = {satellite.name: False}
-        infos = {satellite.name: {}}
-        return observations, rewards, terminations, truncations, infos
-
-    def rewards(self, observations):
-        agent_name = self.satellites[0].name
-        state = observations[agent_name]
-        target = self.target
-        tolerance = self.tolerance
-
-        current_a = state[0]
-        current_ex = state[1]
-        current_ey = state[2]
-        current_hx = state[3]
-        current_hy = state[4]
-
-        target_a = target[0]
-        target_ex = target[1]
-        target_ey = target[2]
-        target_hx = target[3]
-        target_hy = target[4]
-
-        a_diff = abs(target_a - current_a)
-        ex_diff = abs(target_ex - current_ex)
-        ey_diff = abs(target_ey - current_ey)
-        hx_diff = abs(target_hx - current_hx)
-        hy_diff = abs(target_hy - current_hy)
-
-        if (
-            a_diff <= tolerance[0]
-            and ex_diff <= tolerance[1]
-            and ey_diff <= tolerance[2]
-            and hx_diff <= tolerance[3]
-            and hy_diff <= tolerance[4]
-        ):
-            return {agent_name: 1}, {agent_name: True}
-
-        r_a = a_diff / target_a
-        r_ex = ex_diff
-        r_ey = ey_diff
-        r_hx = hx_diff
-        r_hy = hy_diff
-
-        alpha_a = a_diff / target_a
-        alpha_ex = ex_diff / target_ex
-        alpha_ey = ey_diff / target_ey
-        alpha_hx = hx_diff / target_hx
-        alpha_hy = hy_diff / target_hy
-
-        reward = -(alpha_a * r_a + alpha_ex * r_ex + alpha_ey * r_ey + alpha_hx * r_hx + alpha_hy * r_hy)
-        
-        return {agent_name: reward*10}, {agent_name: False}
-
-```
-On init, we're creating the target orbit and tolerance. Then, we're changing method create_bodies so that the environment knows that the sattelites are from **Agent** class (not **Satellite** class). On rewards function, we're receiving the agents observations and calculating rewards of those observations (it can also receive the previous observations and actions if needed). Function step receives actions, applies those actions on each body, calls function reward and returns the new observations and rewards. Function reset is also changed so that it returns the needed observations.
-
-### Training
-
-Now that the new classes are created, we can build the training script. Firstly, we define the params object and initialize the newly created environment:
-
-```py
-params = {
-        "satellites": [
-            {"name": "agent",
-             "initial_state": {"x": 6129800.048013737, "y": 7280790.331579311, "z": 415150.31877402193, "x_dot": -5281.077303515858, "y_dot": 4683.916455224767, "z_dot": 543.1013245770663},
-             "initial_state_uncertainty": {"x": 10.0, "y": 10.0, "z": 10.0, "x_dot": 0.001, "y_dot": 0.001, "z_dot": 0.001},
-             "initial_mass": 500.0,
-             "fuel_mass": 150.0,
-             "isp": 3100.0,
-             "radius": 5.0,
-             "save_steps_info": False,
-             "agent": {
-                "lr_actor": 0.0001,
-                "lr_critic": 0.001,
-                "gae_lambda": 0.95,
-                "epochs": 10,
-                "gamma": 0.95,
-                "clip": 0.5,
-                "action_std_init": 0.5,
-                "state_dim_actor": 6,
-                "state_dim_critic": 6,
-                "action_space": [1.4, np.pi, 2*np.pi],
-             }},
+interface_config = {
+    "orbits": [
+        {"a": 1500.0e3, "e": 0.001, "i": 0.001, "pa": 0.0, "raan": 0.0, "color": (255, 255, 255)},
+        {"a": 3000.0e3, "e": 0.001, "i": 0.001, "pa": 0.0, "raan": 0.0, "color": (255, 255, 255)},
         ],
-        "delta_t": 500.0,
-        "forces": {
-            "gravity_model": "Newtonian",
-            "third_bodies": {
-                "active": False,
-                "bodies": ["SUN", "MOON"],
-            },
-            "solar_radiation_pressure": {
-                "active": False,
-                "reflection_coefficients": {
-                    "agent": 0.5,
-                }
-            },
-            "drag": {
-                "active": False,
-                "drag_coefficients": {
-                    "agent": 0.5,
-                }
-            }
+    "body": {
+        "spacecraft": {
+            "show_trail": True,
+            "trail_last_steps": 3000,
+            "color_body": (255, 255, 0),
+            "color_label": (255, 255, 0),
+            "color_trail": (255, 255, 0),
         },
-        "interface": {
-            "show": True,
-            "delay_ms": 0,
-            "zoom": 5.0,
-            "drifters": {
-                "show": True,
-                "show_label": True,
-                "show_velocity": False,
-                "show_trail": True,
-                "trail_last_steps": 100,
-                "color_body": (255, 255, 255),
-                "color_label": (255, 255, 255),
-                "color_velocity": (0, 255, 255),
-                "color_trail": (255, 255, 255),
-            },
-            "satellites": {
-                "show": True,
-                "show_label": True,
-                "show_velocity": False,
-                "show_thrust": True,
-                "show_trail": True,
-                "trail_last_steps": 100,
-                "color_body": (255, 0, 0),
-                "color_label": (255, 255, 255),
-                "color_velocity": (0, 255, 255),
-                "color_thrust": (0, 255, 0),
-                "color_trail": (255, 0, 0),
-            },
-            "earth": {
-                "show": True,
-                "color": (0, 0, 255),
-                "resolution": 50,
-            },
-            "equator_grid": {
-                "show": False,
-                "color": (30, 140, 200),
-                "resolution": 10,
-            },
-            "timestamp": {
-                "show": True,
-            },
-            "orbits": [
-                # {"a": 2030.0e3, "e": 0.01, "i": 5.0, "pa": 20.0, "raan": 20.0, "color": (0, 255, 0)},
-            ],
-        }
-    }
-
-env = ChangeOrbitEnv(params)
+    },
+}
 ```
-
-Since we already have all needed methods, we can finally build the logic for training:
-
+Finally, we initialize the environment using steps of 5 seconds:
 ```py
-episodes = 1000
-steps_per_episode = int(60 * 60 * 24 * 4 / params["delta_t"]) # 4 days
-
-low = np.array([0.0, 0.0, 0.0])
-high = np.array(params["satellites"][0]["agent"]["action_space"])
-
-time_step = 1
-for episode in range(1, episodes + 1):
-    start_step = time_step
-    current_ep_rewards = {str(satellite): 0 for satellite in env.satellites}
-    observations, _ = env.reset(42) # use same seed for reproducibility
-    for t in range(1, steps_per_episode + 1):
-        try:
-            # select actions with policies
-            actions = {str(satellite): satellite.ppo.select_action(observations[str(satellite)]) for satellite in env.satellites}
-            scaled_actions = {str(satellite): ((np.clip(actions[str(satellite)], [-1,-1,-1], [1,1,1]) + 1) / 2) * high for satellite in env.satellites}
-            
-            # apply step
-            observations, rewards, terminations, _, _ = env.step(scaled_actions)
-            
-            # save rewards and is_terminals
-            for satellite in env.satellites:
-                satellite.ppo.buffer.rewards.append(rewards[str(satellite)])
-                satellite.ppo.buffer.is_terminals.append(terminations[str(satellite)])
-            current_ep_rewards = {str(satellite): current_ep_rewards[str(satellite)] + rewards[str(satellite)] for satellite in env.satellites}
-            
-            # decay action std
-            if time_step % action_std_decay_freq == 0 and env.satellites[0].ppo.action_std > min_action_std:
-                for satellite in env.satellites:
-                    satellite.ppo.decay_action_std(action_std_decay_rate, min_action_std)
-
-            if terminations[env.agents[0]]:
-                print(f'Agent reached target!')
-                break
-
-            time_step += 1
-        except Exception as e:
-            # if there's a propagation error, remove last values from each satellite agent buffer
-            for satellite in env.satellites:
-                satellite.ppo.buffer.states.pop()
-                satellite.ppo.buffer.actions.pop()
-                satellite.ppo.buffer.logprobs.pop()
-            traceback.print_exc()
-            break
-
-        if params["interface"]["show"]:
-            env.render()
-
-        if time_step % update_freq == 0:
-            for satellite in env.satellites:
-                satellite.ppo.update_gae()
-
-    # set the last experience termination flag to True
-    if len(env.satellites[0].ppo.buffer.is_terminals) > 0:
-        env.satellites[0].ppo.buffer.is_terminals[-1] = True
-
-    # show scores
-    for satellite in env.satellites:
-        score = current_ep_rewards[str(satellite)]
-        print(f'Episode {episode}: {score}')
-        # save best model
-        if score > best_score:
-            best_score = score
-            satellite.ppo.save(f"model_checkpoint.pth")
+env = OrbitZoo(
+    step_size=5,
+    dynamics_library='orekit',
+    spacecrafts=spacecrafts,
+    interface_config=interface_config,
+    render=True
+    )
 ```
+
+For the specifications of this spacecraft, in theory it is needed instantaneous thrusts of $F_1 = 1512~N$ and $F_2 = 1452~N$ (already considering the loss of mass). If we consider that the spacecraft applies that force for one minute with a constant loss of mass, then $F_1 = 24.84082~N$ and $F_2 = 23.06173~N$, and the time of the entire manoeuver is of $3987$ seconds.
+
+To verify if these calculations are correct, we can perform the needed manoeuvers through the 'actions' argument in the 'step' function:
+```py
+sc = env.dynamics.get_body('spacecraft')
+print(sc.get_keplerian_elements()[0] - 6378e3) # initial semi major axis
+>>> 1499999.6067241011
+env.step(step_size=60, actions = {'spacecraft': [0, 24.84082, 0]}) # F1
+env.step(step_size=3987) # advance time until F2
+env.step(step_size=60, actions = {'spacecraft': [0, 23.06173, 0]}) # F2
+print(sc.get_keplerian_elements()[0] - 6378e3) # final semi major axis
+>>> 2999626.5240018032
+```
+
+The action is a thrust in the RSW representation, so in this case we are applying a thrust in the along-track direction (forward).
+To actually see the manoeuver in the interface, we can do something like:
+```py
+for t in range(3000):
+    if t < 12: # F1 for 1 minute (each step is 5 seconds)
+        env.step(actions = {'spacecraft': [0, 24.84082, 0]})
+    elif 798 <= t < 798 + 12: # F2 for 1 minute (each step is 5 seconds)
+        env.step(actions = {'spacecraft': [0, 23.06173, 0]})
+    else:
+        env.step() # else do not perform manoeuvers
+    env.render()
+```
+![image](utils/hohmann2.png)
+
+## Reinforcement Learning
+
+Suppose that we now want an agent (spacecraft) to learn how to perform the Hohmann manoeuver. For this, we simply must implement the 'observations' and 'rewards' functions. This can be done by extending the OrbitZoo environment:
+```py
+class HohmannEnv(OrbitZoo):
+
+    def reset(self, seed = None):
+        self.target_equinoctial = np.array([8408204.495660448, 0.0076446731569584135, 0.006435206581169143, 0.041027865160605206, 0.014932918790568754])
+        self.tolerance = np.array([100.0, 0.005, 0.005, 0.001, 0.001])
+        return super().reset(seed)
+    
+    def observations(self):
+        observations = {}
+        for spacecraft in self.dynamics.spacecrafts:
+            equinoctial_elements = spacecraft.get_equinoctial_elements()
+            equinoctial_elements[0] /= self.target_equinoctial[0]
+            observations[spacecraft.name] = equinoctial_elements + [spacecraft.get_fuel()]
+        return observations
+    
+    def rewards(self, actions, observations, new_observations, running_agents):
+    rewards = {}
+    terminations = {}
+
+    target = np.array(self.target_equinoctial[:5])
+    tol = np.array(self.tolerance[:5])
+
+    # weights
+    alpha = np.array([1000, 1, 1, 10, 10])
+    alpha_1 = 1
+    alpha_2 = 0.5
+
+    for spacecraft in self.dynamics.spacecrafts:
+
+        agent = spacecraft.name
+        if agent not in running_agents:
+            continue
+
+        action = np.clip(actions[agent], -1, 1)
+
+        # current & previous equinoctial vectors (a, ex, ey, hx, hy)
+        cur = np.array(new_observations[agent][:5])
+        prev = np.array(observations[agent][:5])
+
+        # differences now & before
+        diff = np.abs(target - cur)
+        diff_prev = np.abs(target - prev)
+
+        # check tolerance
+        if np.all(diff <= tol):
+            rewards[agent] = 0
+            terminations[agent] = False
+            continue
+
+        # improvement ratios (divide only if outside tolerances)
+        mask = diff > tol
+        ratios = np.zeros_like(diff)
+        ratios[mask] = (diff_prev[mask] - diff[mask]) / target[mask]
+
+        # weighted improvement
+        improvement = np.sum(alpha * ratios)
+
+        # thrust switch
+        thrust_indicator = 0 if action[3] < 0 else 1
+
+        # final reward
+        thrust_fraction = (action[0] + 1) / 2      # magnitude term
+        penalty_term = (action[1] + 1) / 2         # direction penalty
+
+        rewards[agent] = thrust_indicator * (
+            alpha_1 * thrust_fraction * improvement
+            - alpha_2 * penalty_term
+        )
+
+        terminations[agent] = False
+
+    return rewards, terminations
+```
+We take advantage of the 'reset' function to define values that are needed for the mission, such as the target orbit in this case. The agent observes its current equinoctial elements (similar to Keplerian elements) and fuel, and the reward encourages the agent to apply large but accurate thrusts.
+
+For training, OrbitZoo contains implementations of RL algorithms with discrete and continuous actions spaces, as well as off-policy and on-policy algorithms. In this scenario, algorithms with discrete action spaces do not work out because we want the agent to learn both the direction and magnitude of the thrust, which are very specific values. We can use the continuous version of PPO, where we include an additional dimension for the decision to apply thrust ($-1 \leq \delta \leq 1$):
+```py
+def action_to_thrust(self, action):
+    scaled_action = ((action + 1) / 2) * self.action_space
+    polar_thrust = np.array([0.0, 0.0, 0.0]) if scaled_action[3] < 0.5 else scaled_action[:-1]
+    mag, theta, phi = polar_thrust
+    thrust_r = mag * np.sin(theta) * np.cos(phi)
+    thrust_s = mag * np.cos(theta)                
+    thrust_w = mag * np.sin(theta) * np.sin(phi)
+    rsw_thrust = np.array([thrust_r, thrust_s, thrust_w])
+    return rsw_thrust
+```
+Finally, we can initialize the environment and train the agent using some hyperparameters:
+```py
+env = HohmannEnv(step_size=5, spacecrafts=spacecrafts)
+env.train(
+    episodes=100_000,
+    steps_per_episode=1000,
+    rl_algorithms={
+        'spacecraft': 'ppo'
+    },
+    rl_kwargs={
+        'spacecraft': {
+            'update_every': 4096,
+            'action_space': [500, np.pi, 2*np.pi, 1],
+            'has_continuous_action_space': True,
+            'lr_actor': 0.0001,
+            'lr_critic': 0.001,
+            'clip': 0.1,
+            'K_epochs': 5,
+            'learn_epsilon': False,
+            'epsilon': 0.5,
+            'epsilon_decay_rate': 0.8,
+            'epsilon_decay_every_updates': 10,
+            'epsilon_min': 0.05,
+        }
+    },
+    rl_action_to_thrust_fn={
+        'spacecraft': action_to_thrust
+    }
+)
+```
+
+For different RL algorithm implementations or more complex training scenarios, especially in MARL, users can create custom scripts while still making use of the OrbitZoo framework, which offers standardized tools and useful utility functions.
