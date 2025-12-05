@@ -12,6 +12,9 @@ OrbitZoo is an open-source python environment designed to simulate the system dy
   <img src="utils/marl.gif" width="300">
 </p>
 
+The code for this project is available in the official
+[OrbitZoo GitHub repository](https://github.com/orbitzoo/orbit_zoo).
+
 For more videos of OrbitZoo's interface, see:
 
 - [Interface Video](https://www.youtube.com/watch?v=zyRtR-WDzXU)
